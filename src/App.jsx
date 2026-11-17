@@ -140,6 +140,7 @@ export default function App() {
   const saveAttendance = async (employee, changes) => {
     const current = attendance.find(x => x.employee_id === employee.id);
     const next = { ...(current || {}), ...changes };
+    if (next.status === 'absent') { next.check_in = null; next.check_out = null; }
     const worked = hoursBetween(next.check_in, next.check_out);
     const payload = {
       department_id: userId, employee_id: employee.id, work_date: selectedDate,
