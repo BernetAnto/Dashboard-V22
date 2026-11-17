@@ -2,15 +2,14 @@ package com.bernetanto.dashboardv22
 
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.activity.ComponentActivity
+import android.app.Activity
 
-class MainActivity : ComponentActivity() {
+class MainActivity : Activity() {
     private lateinit var webView: WebView
     private val appHost = "bernetanto.github.io"
     private val appUrl = "https://bernetanto.github.io/Dashboard-V22/"
