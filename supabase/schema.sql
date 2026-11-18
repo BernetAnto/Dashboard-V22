@@ -7,7 +7,8 @@ create table if not exists public.employees (
   id uuid primary key default gen_random_uuid(),
   department_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (char_length(trim(name)) > 0),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.attendance (
@@ -21,6 +22,7 @@ create table if not exists public.attendance (
   total_hours numeric(7,2) not null default 0,
   overtime_hours numeric(7,2) not null default 0,
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   unique (department_id, employee_id, work_date)
 );
 
@@ -70,3 +72,26 @@ begin
     alter publication supabase_realtime add table public.production_entries;
   end if;
 end $$;
+
+-- Keep last-saved timestamps current on every edit.
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists employees_set_updated_at on public.employees;
+create trigger employees_set_updated_at before update on public.employees
+for each row execute function public.set_updated_at();
+
+drop trigger if exists attendance_set_updated_at on public.attendance;
+create trigger attendance_set_updated_at before update on public.attendance
+for each row execute function public.set_updated_at();
+
+drop trigger if exists production_entries_set_updated_at on public.production_entries;
+create trigger production_entries_set_updated_at before update on public.production_entries
+for each row execute function public.set_updated_at();
