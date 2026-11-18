@@ -36,6 +36,7 @@ create table if not exists public.production_entries (
   total_quantity integer not null default 0 check (total_quantity >= 0),
   percentage numeric(7,2) not null default 0 check (percentage >= 0 and percentage <= 100),
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   unique (department_id, work_date)
 );
 
