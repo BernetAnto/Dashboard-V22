@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, CalendarCheck, Factory, Settings, LogOut, Plus,
   Search, Sun, Moon, Menu, X, Trash2, Pencil, Clock3, CheckCircle2,
   AlertCircle, LockKeyhole, RefreshCw, TrendingUp, ClipboardList, Save,
-  ChevronRight, Building2
+  ChevronRight, Building2, ArrowLeftRight
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
@@ -20,6 +20,9 @@ const hoursBetween = (start, end) => {
   return Math.round((mins/60)*100)/100;
 };
 const fmt = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const dayShort = (date) => date ? new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short' }) : '';
+const savedAt = (item) => item?.updated_at || item?.created_at || null;
+const fmtSavedAt = (value) => value ? new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 const initialForm = { work_date: today(), orders_quantity: '', idc_quantity: '', rejection_quantity: '' };
 
 export default function App() {
@@ -38,6 +41,8 @@ export default function App() {
   const [attendance, setAttendance] = useState([]);
   const [production, setProduction] = useState([]);
   const [selectedDate, setSelectedDate] = useState(today());
+  const [compareDateA, setCompareDateA] = useState(today());
+  const [compareDateB, setCompareDateB] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 1); return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); });
   const [search, setSearch] = useState('');
   const [employeeName, setEmployeeName] = useState('');
   const [editingEmployee, setEditingEmployee] = useState(null);
@@ -48,7 +53,7 @@ export default function App() {
 
   const userId = session?.user?.id;
   const nav = [
-    ['Overview', LayoutDashboard], ['Employees', Users],
+    ['Overview', LayoutDashboard], ['Comparison', ArrowLeftRight], ['Employees', Users],
     ['Attendance', CalendarCheck], ['Production', Factory], ['Settings', Settings]
   ];
 
@@ -64,7 +69,7 @@ export default function App() {
     const [e, a, p] = await Promise.all([
       supabase.from('employees').select('*').order('name'),
       supabase.from('attendance').select('*').eq('work_date', selectedDate),
-      supabase.from('production_entries').select('*').order('work_date', { ascending: false }).limit(60)
+      supabase.from('production_entries').select('*').order('work_date', { ascending: false })
     ]);
     const error = e.error || a.error || p.error;
     if (error) setNotice(error.message);
@@ -192,6 +197,9 @@ export default function App() {
   const todayProduction = production.find(x => x.work_date === selectedDate);
   const productionTotal = Number(todayProduction?.total_quantity || 0);
   const filteredEmployees = useMemo(() => employees.filter(x => x.name.toLowerCase().includes(search.toLowerCase())), [employees, search]);
+  const compareA = production.find(x => x.work_date === compareDateA);
+  const compareB = production.find(x => x.work_date === compareDateB);
+  const latestSaved = [...employees, ...attendance, ...production].map(savedAt).filter(Boolean).sort((a,b) => new Date(b)-new Date(a))[0];
 
   if (!supabase || !session) return <div className="auth-screen">
     <div className="auth-card">
@@ -256,6 +264,15 @@ export default function App() {
           </div>
           <section className="panel glass"><div className="panel-head"><div><h3>Employee list</h3><p>Latest department members</p></div><button className="primary" onClick={()=>setPage('Employees')}><Users size={16}/> Manage employees</button></div><EmployeeTable people={employees.slice(0,5)} onEdit={p=>{setEditingEmployee(p);setEmployeeName(p.name);setPage('Employees');}} onDelete={deleteEmployee}/></section>
         </>}
+        {page==='Comparison' && <section className="panel glass comparison-panel">
+          <div className="panel-head"><div><h3>Production comparison</h3><p>Choose two dates to compare daily production performance.</p></div><ArrowLeftRight size={19} className="panel-icon"/></div>
+          <div className="compare-date-grid">
+            <label>First date <span className="weekday-chip">{dayShort(compareDateA)}</span><input type="date" value={compareDateA} onChange={e=>setCompareDateA(e.target.value)}/></label>
+            <label>Second date <span className="weekday-chip">{dayShort(compareDateB)}</span><input type="date" value={compareDateB} onChange={e=>setCompareDateB(e.target.value)}/></label>
+          </div>
+          <div className="table-wrap comparison-table"><table><thead><tr><th>METRIC</th><th>{dayShort(compareDateA)} · {compareDateA}</th><th>{dayShort(compareDateB)} · {compareDateB}</th><th>DIFFERENCE</th></tr></thead><tbody>{[['Orders','orders_quantity'],['IDC','idc_quantity'],['Rejection','rejection_quantity'],['Total quantity','total_quantity'],['Good output %','percentage']].map(([label,key])=>{const a=Number(compareA?.[key]||0),b=Number(compareB?.[key]||0),diff=a-b;return <tr key={key}><td><b>{label}</b></td><td>{fmt(a)}{key==='percentage'?'%':''}</td><td>{fmt(b)}{key==='percentage'?'%':''}</td><td className={diff>0?'compare-positive':diff<0?'compare-negative':''}>{diff>0?'+':''}{fmt(diff)}{key==='percentage'?' pp':''}</td></tr>})}</tbody></table></div>
+          <p className="compare-note">A positive difference means the first selected date is higher. No entry is shown as 0.</p>
+        </section>}
         {page==='Employees' && <section className="panel glass">
           <div className="panel-head"><div><h3>Employee details</h3><p>Add, edit or remove department employees · {employees.length} total</p></div></div>
           <form className="inline-form" onSubmit={saveEmployee}><label>{editingEmployee?'Edit employee name':'New employee name'}<input value={employeeName} onChange={e=>setEmployeeName(e.target.value)} placeholder="Enter employee full name" required/></label><button className="primary"><Plus size={16}/>{editingEmployee?'Update employee':'Add employee'}</button>{editingEmployee&&<button type="button" className="outline" onClick={()=>{setEditingEmployee(null);setEmployeeName('');}}>Cancel</button>}</form>
@@ -264,7 +281,7 @@ export default function App() {
         {page==='Attendance' && <section className="panel glass">
           <div className="panel-head"><div><h3>Daily attendance</h3><p>Mark present / absent and enter working time. OT starts after 8.5 hours.</p></div><span className="live"><i/> LIVE DATA</span></div>
           <div className="attendance-summary"><b>{presentCount} Present</b><span>{attendance.filter(x=>x.status==='absent').length} Absent</span><span>{Math.max(0,employees.length-attendance.length)} Not marked</span></div>
-          {employees.length===0?<EmptyState text="Add employees first to start marking attendance."/>:<div className="table-wrap"><table><thead><tr><th>EMPLOYEE</th><th>ATTENDANCE</th><th>IN TIME</th><th>OUT TIME</th><th>WORK HRS</th><th>OVERTIME</th></tr></thead><tbody>{employees.map(person=>{const row=attendance.find(x=>x.employee_id===person.id)||{};const worked=hoursBetween(row.check_in,row.check_out);return <tr key={person.id}><td><b className="employee-cell">{person.name}</b></td><td><select className={'status-select '+(row.status||'pending')} value={row.status||''} onChange={e=>saveAttendance(person,{...row,status:e.target.value})}><option value="" disabled>Choose</option><option value="present">Present</option><option value="absent">Absent</option></select></td><td><input className="time-input" type="time" value={(row.check_in||'').slice(0,5)} disabled={row.status==='absent'} onChange={e=>saveAttendance(person,{...row,check_in:e.target.value})}/></td><td><input className="time-input" type="time" value={(row.check_out||'').slice(0,5)} disabled={row.status==='absent'} onChange={e=>saveAttendance(person,{...row,check_out:e.target.value})}/></td><td>{fmt(worked)} h</td><td><b className="ot-value">{fmt(Math.max(0,worked-8.5))} h</b></td></tr>})}</tbody></table></div>}
+          {employees.length===0?<EmptyState text="Add employees first to start marking attendance."/>:<div className="table-wrap"><table><thead><tr><th>EMPLOYEE</th><th>ATTENDANCE</th><th>IN TIME</th><th>OUT TIME</th><th>WORK HRS</th><th>OVERTIME</th><th>LAST SAVED</th></tr></thead><tbody>{employees.map(person=>{const row=attendance.find(x=>x.employee_id===person.id)||{};const worked=hoursBetween(row.check_in,row.check_out);return <tr key={person.id}><td><b className="employee-cell">{person.name}</b></td><td><select className={'status-select '+(row.status||'pending')} value={row.status||''} onChange={e=>saveAttendance(person,{...row,status:e.target.value})}><option value="" disabled>Choose</option><option value="present">Present</option><option value="absent">Absent</option></select></td><td><input className="time-input" type="time" value={(row.check_in||'').slice(0,5)} disabled={row.status==='absent'} onChange={e=>saveAttendance(person,{...row,check_in:e.target.value})}/></td><td><input className="time-input" type="time" value={(row.check_out||'').slice(0,5)} disabled={row.status==='absent'} onChange={e=>saveAttendance(person,{...row,check_out:e.target.value})}/></td><td>{fmt(worked)} h</td><td><b className="ot-value">{fmt(Math.max(0,worked-8.5))} h</b></td><td>{fmtSavedAt(savedAt(row))}</td></tr>})}</tbody></table></div>}
         </section>}
         {page==='Production' && <div className="production-layout">
           <section className="panel glass"><div className="panel-head"><div><h3>{editingProduction?'Edit production entry':'Production entry'}</h3><p>Enter daily quantities. Totals and percentage calculate automatically.</p></div><Factory size={19} className="panel-icon"/></div>
@@ -278,17 +295,18 @@ export default function App() {
             </form>
           </section>
           <section className="panel glass"><div className="panel-head"><div><h3>Production history</h3><p>Recent daily production entries</p></div><ClipboardList size={18} className="panel-icon"/></div>
-            {production.length===0?<EmptyState text="No production entries yet."/>:<div className="table-wrap"><table><thead><tr><th>DATE</th><th>ORDERS</th><th>IDC</th><th>REJECTION</th><th>TOTAL</th><th>%</th><th>ACTION</th></tr></thead><tbody>{production.map(item=><tr key={item.id}><td>{item.work_date}</td><td>{fmt(item.orders_quantity)}</td><td>{fmt(item.idc_quantity)}</td><td>{fmt(item.rejection_quantity)}</td><td><b>{fmt(item.total_quantity)}</b></td><td><span className="percent-pill">{fmt(item.percentage)}%</span></td><td><div className="row-actions"><button className="icon-action" onClick={()=>editProduction(item)} title="Edit"><Pencil size={15}/></button><button className="icon-action danger" onClick={()=>deleteProduction(item.id)} title="Delete"><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div>}
+            {production.length===0?<EmptyState text="No production entries yet."/>:<div className="table-wrap"><table><thead><tr><th>DATE</th><th>ORDERS</th><th>IDC</th><th>REJECTION</th><th>TOTAL</th><th>%</th><th>LAST SAVED</th><th>ACTION</th></tr></thead><tbody>{production.map(item=><tr key={item.id}><td>{item.work_date}</td><td>{fmt(item.orders_quantity)}</td><td>{fmt(item.idc_quantity)}</td><td>{fmt(item.rejection_quantity)}</td><td><b>{fmt(item.total_quantity)}</b></td><td><span className="percent-pill">{fmt(item.percentage)}%</span></td><td>{fmtSavedAt(savedAt(item))}</td><td><div className="row-actions"><button className="icon-action" onClick={()=>editProduction(item)} title="Edit"><Pencil size={15}/></button><button className="icon-action danger" onClick={()=>deleteProduction(item.id)} title="Delete"><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div>}
           </section>
         </div>}
         {page==='Settings' && <section className="panel glass settings-panel"><div className="panel-head"><div><h3>Department settings</h3><p>Manage your department account and security.</p></div><Settings size={19} className="panel-icon"/></div><div className="settings-account"><div className="avatar large-avatar"><Building2/></div><div><b>{department}</b><small>Department workspace</small></div></div><form className="password-form" onSubmit={changePassword}><h4>Change password</h4><p>Your initial password is the department name. Choose a new password to secure this account.</p><label>New password<input type="password" minLength="8" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="At least 8 characters" required/></label><label>Confirm new password<input type="password" minLength="8" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Re-enter new password" required/></label><button className="primary"><LockKeyhole size={16}/> Update password</button></form><button className="outline signout-button" onClick={signOut}><LogOut size={16}/> Sign out</button></section>}
       </div>
+      {latestSaved && <div className="save-watermark">LAST SAVED · {fmtSavedAt(latestSaved)}</div>}
     </main>
   </div>;
 }
 
 function EmployeeTable({ people, onEdit, onDelete }) {
   if (!people.length) return <EmptyState text="No employees found. Add an employee to get started."/>;
-  return <div className="table-wrap"><table><thead><tr><th>EMPLOYEE NAME</th><th>ADDED</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>{people.map(person=><tr key={person.id}><td><b className="employee-cell"><span className="mini-avatar">{person.name.slice(0,1).toUpperCase()}</span>{person.name}</b></td><td>{new Date(person.created_at).toLocaleDateString('en-IN')}</td><td><span className="active-pill">Active</span></td><td><div className="row-actions"><button className="icon-action" onClick={()=>onEdit(person)} title="Edit"><Pencil size={15}/></button><button className="icon-action danger" onClick={()=>onDelete(person.id)} title="Delete"><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div>;
+  return <div className="table-wrap"><table><thead><tr><th>EMPLOYEE NAME</th><th>LAST SAVED</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>{people.map(person=><tr key={person.id}><td><b className="employee-cell"><span className="mini-avatar">{person.name.slice(0,1).toUpperCase()}</span>{person.name}</b></td><td>{fmtSavedAt(savedAt(person))}</td><td><span className="active-pill">Active</span></td><td><div className="row-actions"><button className="icon-action" onClick={()=>onEdit(person)} title="Edit"><Pencil size={15}/></button><button className="icon-action danger" onClick={()=>onDelete(person.id)} title="Delete"><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div>;
 }
 function EmptyState({text}) { return <div className="empty-state"><Users size={23}/><p>{text}</p></div>; }
