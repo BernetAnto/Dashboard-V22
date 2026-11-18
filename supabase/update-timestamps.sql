@@ -1,10 +1,20 @@
 -- Run once in Supabase SQL Editor to enable accurate last-saved timestamps.
-alter table public.employees
-  add column if not exists updated_at timestamptz not null default now();
-alter table public.attendance
-  add column if not exists updated_at timestamptz not null default now();
-alter table public.production_entries
-  add column if not exists updated_at timestamptz not null default now();
+-- Existing rows keep their original created_at as their initial saved time.
+alter table public.employees add column if not exists updated_at timestamptz;
+alter table public.attendance add column if not exists updated_at timestamptz;
+alter table public.production_entries add column if not exists updated_at timestamptz;
+
+update public.employees set updated_at = created_at where updated_at is null;
+update public.attendance set updated_at = created_at where updated_at is null;
+update public.production_entries set updated_at = created_at where updated_at is null;
+
+alter table public.employees alter column updated_at set default now();
+alter table public.attendance alter column updated_at set default now();
+alter table public.production_entries alter column updated_at set default now();
+
+alter table public.employees alter column updated_at set not null;
+alter table public.attendance alter column updated_at set not null;
+alter table public.production_entries alter column updated_at set not null;
 
 create or replace function public.set_updated_at()
 returns trigger
